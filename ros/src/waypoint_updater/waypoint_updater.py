@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
 import rospy
-from geometry_msgs.msg import PoseStamped
+import numpy as np
+from geometry_msgs.msg import PoseStamped, Pose
 from styx_msgs.msg import Lane, Waypoint
+from scipy.spatial import KDTree
 
 import math
 
@@ -37,16 +39,29 @@ class WaypointUpdater(object):
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
         # TODO: Add other member variables you need below
+        self.ego = None
+        self.waypoints = None
+        self.waypoints_2d = None
+        self.waypoints_tree = None
 
-        rospy.spin()
+        self.loop()
+
+    def loop(self):
+        rate = rospy.Rate(50)
+        while not rospy.is_shutdown():
+            if self.ego and self.waypoints_tree:
+                next_wp = self.get_next_waypoint(self.ego)
+                self.publish(next_wp)
+            rate.sleep()
 
     def pose_cb(self, msg):
-        # TODO: Implement
-        pass
+        self.ego = msg.pose
 
-    def waypoints_cb(self, waypoints):
-        # TODO: Implement
-        pass
+    def waypoints_cb(self, msg):   
+        self.waypoints = msg.waypoints
+        if not self.waypoints_2d:
+            self.waypoints_2d = [[wp.pose.pose.position.x, wp.pose.pose.position.y] for wp in self.waypoints]
+            self.waypoints_tree =  KDTree(self.waypoints_2d)
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
@@ -55,7 +70,26 @@ class WaypointUpdater(object):
     def obstacle_cb(self, msg):
         # TODO: Callback for /obstacle_waypoint message. We will implement it later
         pass
+    
+    def get_next_waypoint(self, ref):
+        # get next waypoint after ref
+        # Note: does not take into account the orientation or direction of ref
+        index = self.waypoints_tree.query([ref.position.x, ref.position.y], 1)[1]
+        
+        wp_next = self.waypoints_2d[index]
+        wp_prev = self.waypoints_2d[index-1]
 
+        # dot product of two vectory points in the same direction is positive
+        wp_next_vector = np.array(wp_next)
+        wp_prev_vector = np.array(wp_prev)
+        ref_vector = np.array([ref.position.x, ref.position.y])
+
+        dot = np.dot( wp_next_vector - wp_prev_vector, ref_vector - wp_next_vector )
+        if dot > 0: # wp_next is behind ref 
+            index = (index +1) % len(self.waypoints_2d)
+
+        return index
+    
     def get_waypoint_velocity(self, waypoint):
         return waypoint.twist.twist.linear.x
 
@@ -70,6 +104,10 @@ class WaypointUpdater(object):
             wp1 = i
         return dist
 
+    def publish(self, wp_start):
+        lane = Lane()
+        lane.waypoints = self.waypoints[wp_start:wp_start + LOOKAHEAD_WPS]
+        self.final_waypoints_pub.publish(lane)
 
 if __name__ == '__main__':
     try:
