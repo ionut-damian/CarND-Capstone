@@ -26,6 +26,10 @@ class Controller(object):
 
     def control(self, dbw_enabled, current_vel, target_linear_vel, target_angular_vel):
 
+        if not dbw_enabled:
+            self.vel_pid.reset()
+            return 0, 0, 0
+
         current_time = rospy.get_time()
 
         #throttle
