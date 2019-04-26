@@ -1,11 +1,12 @@
 from __future__ import print_function
 import keras
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Flatten
+from keras.layers import Dense, Dropout, Flatten, GlobalAveragePooling2D
 from keras.layers import Conv2D, MaxPooling2D
 from keras import backend as K
 from keras.layers import Lambda
 from keras.layers import Cropping2D
+from keras.models import Model
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
 from keras.utils.np_utils import to_categorical
@@ -21,7 +22,12 @@ import glob
 import os
 
 batch_size = 64
-epochs = 5
+epochs = 10
+
+PATH = "../data/"
+NUM_CLASSES = 3
+
+INCEPTION = True
 
 # input image dimensions
 input_shape = (300, 400, 3)
@@ -41,7 +47,8 @@ def generator(samples, batch_size=32):
                 # load image
                 image = cv2.imread(sample[1])
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                image = cv2.resize(image, (400,300), interpolation = cv2.INTER_CUBIC) 
+                image = cv2.resize(image, (400,300), interpolation = cv2.INTER_CUBIC)                 
+                image = image[0:299, 0:299] #crop
 
                 images.append(image)
                 # load steering angle
@@ -49,11 +56,11 @@ def generator(samples, batch_size=32):
                 labels.append(label)   
 
             # yield results
-            x_train = np.array(images, dtype='float32')
-            y_train = np.array(labels, dtype='int32')
-            y_binary = to_categorical(y_train)
+            x = np.array(images, dtype='float32')            
+            y = np.array(labels, dtype='int32')
+            y_binary = to_categorical(y)
 
-            yield shuffle(x_train, y_binary)
+            yield shuffle(x, y_binary)
                     
 def create_model():
     model = Sequential()
@@ -79,21 +86,81 @@ def create_model():
     model.add(Dropout(0.5))
     model.add(Dense(10))
     # output
-    model.add(Dense(4))    
+    model.add(Dense(NUM_CLASSES))    
     return model
+
+def create_inception():    
+    from keras.applications.inception_v3 import InceptionV3# create the base pre-trained model
+    base_model = InceptionV3(weights='imagenet', include_top=False)
+    x = base_model.output
+    x = GlobalAveragePooling2D()(x)
+    x = Dense(512, activation='relu')(x)
+    out = Dense(NUM_CLASSES, activation='softmax')(x)    
+    model = Model(inputs=base_model.input, outputs=out)
+    
+    return base_model, model
+
+def train_model(base_model):    
+    model.compile(loss='categorical_crossentropy',
+                  optimizer='adam', metrics=['accuracy'])
+
+    history_object = model.fit_generator(train_generator, steps_per_epoch=len(train_samples)/batch_size,
+              validation_data=validation_generator, validation_steps=len(validation_samples)/batch_size,
+              epochs=epochs,
+              verbose=1)
+
+def train_inception(base_model, model):
+    # first: train only the top layers (which were randomly initialized)
+    # i.e. freeze all convolutional InceptionV3 layers
+    for layer in base_model.layers:
+        layer.trainable = False
+
+    model.compile(loss='categorical_crossentropy',
+                  optimizer='rmsprop', metrics=['accuracy'])
+
+    model.fit_generator(train_generator, steps_per_epoch=len(train_samples)/batch_size,
+              validation_data=validation_generator, validation_steps=len(validation_samples)/batch_size,
+              epochs=epochs,
+              verbose=1)
+    
+    # at this point, the top layers are well trained and we can start fine-tuning
+    # convolutional layers from inception V3. We will freeze the bottom N layers
+    # and train the remaining top layers.
+
+    # let's visualize layer names and layer indices to see how many layers
+    # we should freeze:
+    for i, layer in enumerate(base_model.layers):
+       print(i, layer.name)
+
+    # we chose to train the top 2 inception blocks, i.e. we will freeze
+    # the first 249 layers and unfreeze the rest:
+    for layer in model.layers[:249]:
+       layer.trainable = False
+    for layer in model.layers[249:]:
+       layer.trainable = True# we need to recompile the model for these modifications to take effect
+    
+    # we use SGD with a low learning rate
+    from keras.optimizers import SGD
+    model.compile(optimizer=SGD(lr=0.0001, momentum=0.9), loss='categorical_crossentropy')
+
+    # we train our model again (this time fine-tuning the top 2 inception blocks
+    # alongside the top Dense layers
+    model.fit_generator(train_generator, steps_per_epoch=len(train_samples)/batch_size,
+              validation_data=validation_generator, validation_steps=len(validation_samples)/batch_size,
+              epochs=epochs,
+              verbose=1)   
 
 ################################
 # MAIN
-path = "/home/student/capstone/ros/src/tl_detector/data/"
 samples = []
-for i in range(5):
+for i in range(3):
     label = i
     if i == 3:
         continue #skip class 3
     if i == 4:
         label = 3 #remap 4 (UNKNOWN)
 
-    files = glob.glob(path + str(i) + "/*.jpg")
+    files = glob.glob(PATH + str(i) + "/*.jpg")
     for f in files:
         samples.append([label, f])
 
@@ -106,27 +173,15 @@ validation_generator = generator(validation_samples, batch_size=batch_size)
 print("train samples: " + str(len(train_samples)))
 print("valid samples: " + str(len(validation_samples)))
 
-##todo: test with existing model
-#from keras.applications.inception_v3 import InceptionV3
-#model = InceptionV3(weights='imagenet', include_top=False) #v3 needs 299x299 images
-
-
-model = create_model()
-model.compile(loss='categorical_crossentropy',
-              optimizer='adam', metrics=['accuracy'])
-
-history_object = model.fit_generator(train_generator, steps_per_epoch=len(train_samples)/batch_size,
-          validation_data=validation_generator, validation_steps=len(validation_samples)/batch_size,
-          epochs=epochs,
-          verbose=1)
+model = None
+if INCEPTION:
+    base, model = create_inception()  
+    train_inception(base, model)    
+else:
+    model = create_model()
+    train_model(model)   
 
 model.save('model.h5')
 
-### plot the training and validation loss for each epoch
-#plt.plot(history_object.history['loss'])
-#plt.plot(history_object.metrics['accuracy'])
-#plt.title('model mean squared error loss')
-#plt.ylabel('accuracy')
-#plt.xlabel('epoch')
-#plt.legend(['training set', 'validation set'], loc='upper right')
-#plt.show()
+
+    
