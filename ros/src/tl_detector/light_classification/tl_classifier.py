@@ -34,11 +34,12 @@ class TLClassifier(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
-        image = cv2.resize(image, (400,300), interpolation = cv2.INTER_CUBIC) 
+        image = cv2.resize(image, (400,300), interpolation = cv2.INTER_CUBIC)             
+        image = image[0:299, 0:299] #crop
+
         image_array = np.asarray(image)
 
         with self.graph.as_default():
-            result = self.model.predict(image[None, :, :, :], batch_size=1)
-            #keras.backend.clear_session()
+            result = self.model.predict(image[None, :, :, :], batch_size=1).squeeze()
             id = np.argmax(result)
             return id, result[id]
