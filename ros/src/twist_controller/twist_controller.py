@@ -1,5 +1,6 @@
 from pid import PID
 from yaw_controller import YawController
+from lowpass import LowPassFilter
 
 import rospy
 
@@ -19,8 +20,10 @@ class Controller(object):
         self.accel_limit = accel_limit
         self.wheel_radius  = wheel_radius 
         
-        self.vel_pid = PID(0.3, 0.001, 3, 0, 1)
+        self.vel_pid = PID(0.4, 0, 0.1, 0, 1)
         #self.steer_pid = PID(0.2, 0.0001, 1.0)
+
+        self.vel_filter = LowPassFilter(0.5, 1./50.)
 
         self.time = rospy.get_time()
 
@@ -31,10 +34,14 @@ class Controller(object):
             return 0, 0, 0
 
         current_time = rospy.get_time()
-        delta_time = self.time - current_time
+        delta_time = current_time - self.time
+        self.time = current_time
+
+        current_vel = self.vel_filter.filt(current_vel)
 
         #cap velocity
-        target_linear_vel = max(current_vel + self.accel_limit * delta_time, target_linear_vel)
+        if target_linear_vel > current_vel:
+            target_linear_vel = max(current_vel + self.accel_limit * delta_time, target_linear_vel)
 
         #throttle
         vel_error = target_linear_vel - current_vel
@@ -53,11 +60,10 @@ class Controller(object):
             throttle = 0
             break_force = 700
 
-        if target_linear_vel < current_vel:
+        if throttle < 0.1 and target_linear_vel < current_vel:
             throttle = 0
-            decel = max(target_linear_vel - current_vel, self.decel_limit)
+            decel = max(target_linear_vel - current_vel, self.decel_limit * delta_time)
+            # rospy.logwarn("vel_t %.2f, vel_c %.2f, decel %.2f, decel_f %.2f", target_linear_vel, current_vel, target_linear_vel - current_vel, decel)
             break_force = abs(decel) * self.vehicle_mass * self.wheel_radius
-
-        self.time = current_time
 
         return throttle, break_force, steering_value

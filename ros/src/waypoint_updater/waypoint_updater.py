@@ -26,7 +26,7 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 
 LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
 MAX_TL_TIME_DIFF = 1.0
-DECELERATION_DISTANCE = 100 #in number of waypoints
+DECELERATION_DISTANCE = 160 #in number of waypoints
 
 class WaypointUpdater(object):
     def __init__(self):
@@ -37,8 +37,8 @@ class WaypointUpdater(object):
         self.waypoints = None
         self.waypoints_2d = None
         self.waypoints_tree = None
-        self.stop_line_wp = -1
-        self.last_stop_line_time = 0
+        #self.last_stop_time = 0
+        self.last_stop_wp = -1
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
@@ -51,17 +51,8 @@ class WaypointUpdater(object):
     def loop(self):
         rate = rospy.Rate(50)
         while not rospy.is_shutdown():
-            if self.ego and self.waypoints_tree:
-                
-                #update velocity
-                self.velocity = self.kmph2mps(rospy.get_param('/waypoint_loader/velocity'))
-
-                current_time = rospy.get_time()        
-                # reset waypoint speeds if we rdid not see a red light recently
-                if current_time > self.last_stop_line_time + MAX_TL_TIME_DIFF:
-                    for i in range(len(self.waypoints)):
-                        self.set_waypoint_velocity(self.waypoints, i, self.velocity)  
-
+            if self.ego and self.waypoints_tree:            
+                self.update_velocity()
                 next_wp = self.get_next_waypoint(self.ego)                
                 self.publish(next_wp)
 
@@ -77,23 +68,41 @@ class WaypointUpdater(object):
             self.waypoints_tree =  KDTree(self.waypoints_2d)
 
     def traffic_cb(self, msg):
-        self.stop_line_wp = msg.data
-        self.last_stop_line_time = rospy.get_time()  
+        stop_wp = msg.data
+        #self.last_stop_time = rospy.get_time()  
 
-        #if self.stop_line_wp < 0: #green
-        #    for i in range(len(self.waypoints)):
-        #        self.set_waypoint_velocity(self.waypoints, i, self.velocity)  
-        #    return
+        if self.last_stop_wp == stop_wp:
+            return #we already reacted to this
         
-        # adjust velocity for 200 waypoints before stop line
-        start_wp = (self.stop_line_wp - DECELERATION_DISTANCE) % len(self.waypoints)
+        self.last_stop_wp = stop_wp
 
-        total_dist = self.distance(self.waypoints, start_wp, self.stop_line_wp)
-        for i in range(start_wp, self.stop_line_wp):
-            dist = self.distance(self.waypoints, i, self.stop_line_wp)
+        if stop_wp < 0: #green
+            for i in range(len(self.waypoints)):
+                self.set_waypoint_velocity(self.waypoints, i, self.velocity)  
+            return
+        
+        # adjust velocity for DECELERATION_DISTANCE waypoints before stop line
+        decel_start_wp = stop_wp - DECELERATION_DISTANCE
+
+        total_dist = self.distance(self.waypoints, decel_start_wp, stop_wp)
+        for i in range(decel_start_wp, stop_wp):
+            idx = i % len(self.waypoints)
+            dist = self.distance(self.waypoints, idx, stop_wp)
             ratio = dist / total_dist
-            self.set_waypoint_velocity(self.waypoints, i, self.velocity * ratio)     
+            self.set_waypoint_velocity(self.waypoints, idx, self.velocity * ratio)  
+
+        #zero  some waypoints after stop_wp just in case
+        for i in range(stop_wp, stop_wp + 50):
+            idx = i % len(self.waypoints)
+            self.set_waypoint_velocity(self.waypoints, idx, 0)  
     
+    def update_velocity(self):   
+        new_vel = self.kmph2mps(rospy.get_param('/waypoint_loader/velocity'))
+        if new_vel != self.velocity:
+            self.velocity = new_vel
+            for i in range(len(self.waypoints)):
+                self.set_waypoint_velocity(self.waypoints, i, self.velocity) 
+
     def get_next_waypoint(self, ref):
         # get next waypoint after ref
         # Note: does not take into account the orientation or direction of ref
@@ -130,10 +139,13 @@ class WaypointUpdater(object):
     def publish(self, wp_start):
         lane = Lane()
         lane.waypoints = self.waypoints[wp_start:wp_start + LOOKAHEAD_WPS]
+        if len(lane.waypoints) < LOOKAHEAD_WPS:
+            lane.waypoints += self.waypoints[0:LOOKAHEAD_WPS - len(lane.waypoints)]
 
         #msg = ""
         #for i in range(10):
-        #    msg += "{0:.2f}".format(lane.waypoints[i].twist.twist.linear.x) + " "
+        #    idx = i % len(lane.waypoints)
+        #    msg += "{0:.1f}".format(lane.waypoints[idx].twist.twist.linear.x) + " "
         #rospy.logwarn(msg)
 
         self.final_waypoints_pub.publish(lane)

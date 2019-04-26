@@ -16,7 +16,7 @@ from scipy.spatial import KDTree
 import os
 
 STATE_COUNT_THRESHOLD = 3
-MIN_DIST_TO_LIGHT = 25
+MIN_DIST_TO_LIGHT = 22
 MAX_DIST_TO_LIGHT = 140
 MAX_IMAGE_TIME_DIFF = 5
 MIN_IMAGE_TIME_DIFF = 0.5
@@ -91,6 +91,8 @@ class TLDetector(object):
         self.light_classifier = TLClassifier()
         self.listener = tf.TransformListener()
 
+        rospy.logwarn("TL intialized")
+
         self.loop()
 
     def loop(self):
@@ -104,7 +106,9 @@ class TLDetector(object):
                     rate.sleep()
                     continue
 
-                self.publish(light_wp, light.state, True)                
+                rospy.logwarn("no camera image receveied within last %.1fs, using ground truth TL data", MAX_IMAGE_TIME_DIFF)
+
+                self.publish(light_wp, light.state)                
 
             rate.sleep()
 
@@ -150,12 +154,12 @@ class TLDetector(object):
         # get actual light state from camera
         light_state_predicted = self.get_light_state(light)
 
-        if light.state != light_state_predicted:
-            rospy.logwarn("traffic light prediction error (predicted = %d, ground truth = %d)", light_state_predicted, light.state)
+        #if light.state != light_state_predicted:
+        #    rospy.logwarn("traffic light prediction error (predicted = %d, ground truth = %d)", light_state_predicted, light.state)
 
-        self.publish(light_wp, light_state_predicted, False)
+        self.publish(light_wp, light_state_predicted)
 
-    def publish(self, light_wp, state, override_enabled):
+    def publish(self, light_wp, state):
         '''
         Publish upcoming red lights at camera frequency.
         Each predicted state has to occur `STATE_COUNT_THRESHOLD` number
@@ -170,8 +174,6 @@ class TLDetector(object):
             light_wp = light_wp if state == TrafficLight.RED or state == TrafficLight.YELLOW else -1
             self.last_wp = light_wp            
             self.upcoming_red_light_pub.publish(Int32(light_wp))
-            if override_enabled:
-                rospy.logwarn("no camera image receveied within last %.1f, using ground truth TL data", MAX_IMAGE_TIME_DIFF)
         else:
             self.upcoming_red_light_pub.publish(Int32(self.last_wp))
         self.state_count += 1
@@ -194,7 +196,7 @@ class TLDetector(object):
 
         #Get classification
         prediction, score = self.light_classifier.get_classification(cv_image)
-        rospy.logwarn("predicted: %d (%.3f) / %d", prediction, score, light.state)
+        rospy.logwarn("predicted: %d (%.3f) / label: %d", prediction, score, light.state)
 
         return prediction
 
@@ -228,7 +230,7 @@ class TLDetector(object):
 
             #find waypoint closes to stop line
             wp_idx = self.waypoints_tree.query(stop_line, 1)[1]
-            wp = self.waypoints[wp_idx]
+            wp = self.waypoints[wp_idx -1] #grab the one behind to make sure we do not pass the line
 
             return wp_idx, light # we will overwrite the state later if a camera image has arrived
         else:
