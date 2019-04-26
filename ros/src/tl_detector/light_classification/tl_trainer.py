@@ -158,11 +158,6 @@ def train_inception(base_model, model):
 samples = []
 for i in range(3):
     label = i
-    if i == 3:
-        continue #skip class 3
-    if i == 4:
-        label = 3 #remap 4 (UNKNOWN)
-
     files = glob.glob(PATH + str(i) + "/*.jpg")
     for f in files:
         samples.append([label, f])
@@ -184,7 +179,7 @@ else:
     model = create_model()
     train_model(model)   
 
-model.save('model.h5')
+model.save('model2.h5')
 
 
     
