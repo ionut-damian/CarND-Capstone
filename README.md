@@ -4,6 +4,8 @@ This is the project repo for the final project of the Udacity Self-Driving Car N
 
 Ionut Damian (audi-employee218)
 
+Team: n/a
+
 # Description
 
 ![alt text](./imgs/final-project-ros-graph-v2.png)
