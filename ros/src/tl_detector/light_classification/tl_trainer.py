@@ -17,7 +17,6 @@ import csv
 import ntpath
 import numpy as np
 import cv2
-import matplotlib.pyplot as plt
 import glob 
 import os
 
@@ -49,11 +48,15 @@ def generator(samples, batch_size=32):
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 image = cv2.resize(image, (400,300), interpolation = cv2.INTER_CUBIC)                 
                 image = image[0:299, 0:299] #crop
-
                 images.append(image)
+                
+                #flip horizontally
+                images.append(cv2.flip(image, 0))                
+                
                 # load steering angle
                 label = int(sample[0])
                 labels.append(label)   
+                labels.append(label)  #the same label for the flipped image
 
             # yield results
             x = np.array(images, dtype='float32')            
@@ -141,7 +144,7 @@ def train_inception(base_model, model):
     
     # we use SGD with a low learning rate
     from keras.optimizers import SGD
-    model.compile(optimizer=SGD(lr=0.0001, momentum=0.9), loss='categorical_crossentropy')
+    model.compile(optimizer=SGD(lr=0.0001, momentum=0.9), loss='categorical_crossentropy', metrics=['accuracy'])
 
     # we train our model again (this time fine-tuning the top 2 inception blocks
     # alongside the top Dense layers

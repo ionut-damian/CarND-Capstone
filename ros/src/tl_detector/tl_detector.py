@@ -18,6 +18,7 @@ import os
 STATE_COUNT_THRESHOLD = 3
 MIN_DIST_TO_LIGHT = 25
 MAX_DIST_TO_LIGHT = 140
+PROCESS_IMAGE_N = 3
 
 
 def dist(x1, y1, x2, y2):
@@ -61,6 +62,8 @@ class TLDetector(object):
         self.lights_tree = None
 
         self.light_classifier = None
+        
+        self.image_cnt = 0
 
         sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
@@ -102,25 +105,7 @@ class TLDetector(object):
         if not self.lights_tree:
             self.lights_2d = [[light.pose.pose.position.x, light.pose.pose.position.y] for light in self.lights]
             self.lights_tree =  KDTree(self.lights_2d)
-
-    def do_data_collection(self, image):
-        if self.pose:
-            #get nearest light which is in front of ego
-            index = get_nearest(self.pose.pose, self.lights_tree, self.lights_2d)
-            light = self.lights[index]
-            distance = dist(light.pose.pose.position.x, light.pose.pose.position.y,self.pose.pose.position.x, self.pose.pose.position.y)
-
-            rospy.logwarn("dist = %d", distance)            
-            if distance > MIN_DIST_TO_LIGHT and distance < MAX_DIST_TO_LIGHT:
-                label = light.state
-                cv_image = self.bridge.imgmsg_to_cv2(image, "bgr8")
-
-                filename = os.path.join("data", str(label), str(distance) + ".jpg")
-                cv2.imwrite(filename, cv_image)        
-            #else:
-            #    cv_image = self.bridge.imgmsg_to_cv2(image, "bgr8")
-            #    filename = os.path.join("data", "4", str(distance) + ".jpg")
-            #    cv2.imwrite(filename, cv_image)               
+            
 
     def image_cb(self, msg):
         """Identifies red lights in the incoming camera image and publishes the index
@@ -130,7 +115,13 @@ class TLDetector(object):
             msg (Image): image from car-mounted camera
 
         """
-
+        #process only every N-th image
+        if self.image_cnt != PROCESS_IMAGE_N -1:
+            self.image_cnt += 1
+            return
+        
+        self.image_cnt = 0
+        
         #self.do_data_collection(msg)
         #return
 
@@ -213,6 +204,27 @@ class TLDetector(object):
             wp = self.waypoints[wp_idx]
 
             return wp_idx, state
+        else:
+            return -1, TrafficLight.UNKNOWN
+        
+    def do_data_collection(self, image):
+        if self.pose:
+            #get nearest light which is in front of ego
+            index = get_nearest(self.pose.pose, self.lights_tree, self.lights_2d)
+            light = self.lights[index]
+            distance = dist(light.pose.pose.position.x, light.pose.pose.position.y,self.pose.pose.position.x, self.pose.pose.position.y)
+
+            rospy.logwarn("dist = %d", distance)            
+            if distance > MIN_DIST_TO_LIGHT and distance < MAX_DIST_TO_LIGHT:
+                label = light.state
+                cv_image = self.bridge.imgmsg_to_cv2(image, "bgr8")
+
+                filename = os.path.join("data", str(label), str(distance) + ".jpg")
+                cv2.imwrite(filename, cv_image)        
+            #else:
+            #    cv_image = self.bridge.imgmsg_to_cv2(image, "bgr8")
+            #    filename = os.path.join("data", "4", str(distance) + ".jpg")
+            #    cv2.imwrite(filename, cv_image)   
 
 if __name__ == '__main__':
     try:
