@@ -65,7 +65,7 @@ class TLDetector(object):
         self.light_classifier = None
         
         self.camera_image = None
-        self.last_image_time = 0
+        self.last_image_time = -999
 
         sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
@@ -94,7 +94,7 @@ class TLDetector(object):
         self.loop()
 
     def loop(self):
-        rate = rospy.Rate(0.2)
+        rate = rospy.Rate(2)
         while not rospy.is_shutdown():
             current_time = rospy.get_time()
             #if no image has arrived, use ground truth data
@@ -104,8 +104,7 @@ class TLDetector(object):
                     rate.sleep()
                     continue
 
-                rospy.logwarn("no camera image receveied with last %.1f, using groudn truth TL data", MAX_IMAGE_TIME_DIFF)
-                self.publish(light_wp, light.state)                
+                self.publish(light_wp, light.state, True)                
 
             rate.sleep()
 
@@ -154,9 +153,9 @@ class TLDetector(object):
         if light.state != light_state_predicted:
             rospy.logwarn("traffic light prediction error (predicted = %d, ground truth = %d)", light_state_predicted, light.state)
 
-        self.publish(light_wp, light_state_predicted)
+        self.publish(light_wp, light_state_predicted, False)
 
-    def publish(self, light_wp, state):
+    def publish(self, light_wp, state, override_enabled):
         '''
         Publish upcoming red lights at camera frequency.
         Each predicted state has to occur `STATE_COUNT_THRESHOLD` number
@@ -168,9 +167,11 @@ class TLDetector(object):
             self.state = state
         elif self.state_count >= STATE_COUNT_THRESHOLD:
             self.last_state = self.state
-            light_wp = light_wp if state == TrafficLight.RED else -1
-            self.last_wp = light_wp
+            light_wp = light_wp if state == TrafficLight.RED or state == TrafficLight.YELLOW else -1
+            self.last_wp = light_wp            
             self.upcoming_red_light_pub.publish(Int32(light_wp))
+            if override_enabled:
+                rospy.logwarn("no camera image receveied within last %.1f, using ground truth TL data", MAX_IMAGE_TIME_DIFF)
         else:
             self.upcoming_red_light_pub.publish(Int32(self.last_wp))
         self.state_count += 1

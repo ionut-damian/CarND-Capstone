@@ -2,6 +2,7 @@
 
 import rospy
 import numpy as np
+from std_msgs.msg import Int32
 from geometry_msgs.msg import PoseStamped, Pose
 from styx_msgs.msg import Lane, Waypoint
 from scipy.spatial import KDTree
@@ -24,25 +25,26 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
 LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
-
+MAX_TL_TIME_DIFF = 1.0
+DECELERATION_DISTANCE = 100 #in number of waypoints
 
 class WaypointUpdater(object):
     def __init__(self):
         rospy.init_node('waypoint_updater')
 
-        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
-        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
-
-        # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
-
-
-        self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
-
-        # TODO: Add other member variables you need below
+        self.velocity = self.kmph2mps(rospy.get_param('/waypoint_loader/velocity'))
         self.ego = None
         self.waypoints = None
         self.waypoints_2d = None
         self.waypoints_tree = None
+        self.stop_line_wp = -1
+        self.last_stop_line_time = 0
+
+        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
+        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+        rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
+
+        self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
         self.loop()
 
@@ -50,8 +52,19 @@ class WaypointUpdater(object):
         rate = rospy.Rate(50)
         while not rospy.is_shutdown():
             if self.ego and self.waypoints_tree:
-                next_wp = self.get_next_waypoint(self.ego)
+                
+                #update velocity
+                self.velocity = self.kmph2mps(rospy.get_param('/waypoint_loader/velocity'))
+
+                current_time = rospy.get_time()        
+                # reset waypoint speeds if we rdid not see a red light recently
+                if current_time > self.last_stop_line_time + MAX_TL_TIME_DIFF:
+                    for i in range(len(self.waypoints)):
+                        self.set_waypoint_velocity(self.waypoints, i, self.velocity)  
+
+                next_wp = self.get_next_waypoint(self.ego)                
                 self.publish(next_wp)
+
             rate.sleep()
 
     def pose_cb(self, msg):
@@ -64,12 +77,22 @@ class WaypointUpdater(object):
             self.waypoints_tree =  KDTree(self.waypoints_2d)
 
     def traffic_cb(self, msg):
-        # TODO: Callback for /traffic_waypoint message. Implement
-        pass
+        self.stop_line_wp = msg.data
+        self.last_stop_line_time = rospy.get_time()  
 
-    def obstacle_cb(self, msg):
-        # TODO: Callback for /obstacle_waypoint message. We will implement it later
-        pass
+        #if self.stop_line_wp < 0: #green
+        #    for i in range(len(self.waypoints)):
+        #        self.set_waypoint_velocity(self.waypoints, i, self.velocity)  
+        #    return
+        
+        # adjust velocity for 200 waypoints before stop line
+        start_wp = (self.stop_line_wp - DECELERATION_DISTANCE) % len(self.waypoints)
+
+        total_dist = self.distance(self.waypoints, start_wp, self.stop_line_wp)
+        for i in range(start_wp, self.stop_line_wp):
+            dist = self.distance(self.waypoints, i, self.stop_line_wp)
+            ratio = dist / total_dist
+            self.set_waypoint_velocity(self.waypoints, i, self.velocity * ratio)     
     
     def get_next_waypoint(self, ref):
         # get next waypoint after ref
@@ -107,7 +130,16 @@ class WaypointUpdater(object):
     def publish(self, wp_start):
         lane = Lane()
         lane.waypoints = self.waypoints[wp_start:wp_start + LOOKAHEAD_WPS]
+
+        #msg = ""
+        #for i in range(10):
+        #    msg += "{0:.2f}".format(lane.waypoints[i].twist.twist.linear.x) + " "
+        #rospy.logwarn(msg)
+
         self.final_waypoints_pub.publish(lane)
+
+    def kmph2mps(self, velocity_kmph):
+        return (velocity_kmph * 1000.) / (60. * 60.)
 
 if __name__ == '__main__':
     try:

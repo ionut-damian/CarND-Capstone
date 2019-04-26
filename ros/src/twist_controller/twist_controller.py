@@ -31,10 +31,14 @@ class Controller(object):
             return 0, 0, 0
 
         current_time = rospy.get_time()
+        delta_time = self.time - current_time
+
+        #cap velocity
+        target_linear_vel = max(current_vel + self.accel_limit * delta_time, target_linear_vel)
 
         #throttle
         vel_error = target_linear_vel - current_vel
-        throttle = self.vel_pid.step(vel_error, self.time - current_time)
+        throttle = self.vel_pid.step(vel_error, delta_time)
 
         #steering
         #steer_error = target_angular_vel
