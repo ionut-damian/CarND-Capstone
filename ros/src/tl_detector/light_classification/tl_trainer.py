@@ -179,7 +179,7 @@ else:
     model = create_model()
     train_model(model)   
 
-model.save('model2.h5')
+model.save('model.h5')
 
 
     
