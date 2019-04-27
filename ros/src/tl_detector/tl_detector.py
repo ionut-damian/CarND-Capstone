@@ -17,9 +17,10 @@ import os
 
 STATE_COUNT_THRESHOLD = 3
 MIN_DIST_TO_LIGHT = 22
-MAX_DIST_TO_LIGHT = 140
+MAX_DIST_TO_LIGHT = 100
 MAX_IMAGE_TIME_DIFF = 5
 MIN_IMAGE_TIME_DIFF = 0.5
+MIN_SCORE_THRESHOLD = 0.6
 
 DO_DATA_COLLECTION_SIM = False
 DO_DATA_COLLECTION_SITE = False
@@ -141,7 +142,6 @@ class TLDetector(object):
 
         if DO_DATA_COLLECTION_SIM or DO_DATA_COLLECTION_SITE:
             self.do_data_collection(msg)
-            return        
 
         #process only every N-th image
         current_time = rospy.get_time()
@@ -201,6 +201,9 @@ class TLDetector(object):
 
         #Get classification
         prediction, score = self.light_classifier.get_classification(cv_image)
+        if score < MIN_SCORE_THRESHOLD:
+            return TrafficLight.UNKNOWN 
+
         rospy.logwarn("predicted: %d (%.3f) / label: %d", prediction, score, light.state)
 
         return prediction
@@ -250,8 +253,8 @@ class TLDetector(object):
                 light = self.lights[index]
                 distance = dist(light.pose.pose.position.x, light.pose.pose.position.y,self.pose.pose.position.x, self.pose.pose.position.y)
 
-                rospy.logwarn("dist = %d", distance)            
-                if True:# distance > MIN_DIST_TO_LIGHT and distance < MAX_DIST_TO_LIGHT:
+                #rospy.logwarn("dist = %d", distance)            
+                if distance > MIN_DIST_TO_LIGHT and distance < MAX_DIST_TO_LIGHT:
                     label = light.state
                     cv_image = self.bridge.imgmsg_to_cv2(image, "bgr8")
 
