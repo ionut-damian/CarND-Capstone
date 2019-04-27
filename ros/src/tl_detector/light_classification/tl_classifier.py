@@ -9,9 +9,12 @@ import numpy as np
 import cv2
 
 class TLClassifier(object):
-    def __init__(self):        
+    def __init__(self, is_site):        
         # check that model Keras version is same as local Keras version
-        filename = './light_classification/model.h5'
+        if not is_site:
+            filename = './light_classification/model.h5'
+        else:
+            filename = './light_classification/model_site.h5'
 
         f = h5py.File(filename, mode='r')
         model_version = f.attrs.get('keras_version')
