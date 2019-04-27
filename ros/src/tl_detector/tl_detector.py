@@ -21,6 +21,8 @@ MAX_DIST_TO_LIGHT = 140
 MAX_IMAGE_TIME_DIFF = 5
 MIN_IMAGE_TIME_DIFF = 0.5
 
+DO_DATA_COLLECTION_SIM = False
+DO_DATA_COLLECTION_SITE = False
 
 def dist(x1, y1, x2, y2):
     return math.sqrt( (x2-x1)**2 + (y2-y1)**2 )
@@ -136,6 +138,11 @@ class TLDetector(object):
             msg (Image): image from car-mounted camera
 
         """
+
+        if DO_DATA_COLLECTION_SIM or DO_DATA_COLLECTION_SITE:
+            self.do_data_collection(msg)
+            return        
+
         #process only every N-th image
         current_time = rospy.get_time()
         if current_time < self.last_image_time + MIN_IMAGE_TIME_DIFF:
@@ -144,8 +151,6 @@ class TLDetector(object):
         self.camera_image = msg
         self.last_image_time = rospy.get_time()
         
-        #self.do_data_collection(msg)
-        #return
 
         light_wp, light = self.process_traffic_lights()
         if not light:
@@ -238,23 +243,28 @@ class TLDetector(object):
         
 
     def do_data_collection(self, image):
-        if self.pose:
-            #get nearest light which is in front of ego
-            index = get_nearest(self.pose.pose, self.lights_tree, self.lights_2d)
-            light = self.lights[index]
-            distance = dist(light.pose.pose.position.x, light.pose.pose.position.y,self.pose.pose.position.x, self.pose.pose.position.y)
+        if DO_DATA_COLLECTION_SIM:
+            if self.pose:
+                #get nearest light which is in front of ego
+                index = get_nearest(self.pose.pose, self.lights_tree, self.lights_2d)
+                light = self.lights[index]
+                distance = dist(light.pose.pose.position.x, light.pose.pose.position.y,self.pose.pose.position.x, self.pose.pose.position.y)
 
-            rospy.logwarn("dist = %d", distance)            
-            if distance > MIN_DIST_TO_LIGHT and distance < MAX_DIST_TO_LIGHT:
-                label = light.state
-                cv_image = self.bridge.imgmsg_to_cv2(image, "bgr8")
+                rospy.logwarn("dist = %d", distance)            
+                if True:# distance > MIN_DIST_TO_LIGHT and distance < MAX_DIST_TO_LIGHT:
+                    label = light.state
+                    cv_image = self.bridge.imgmsg_to_cv2(image, "bgr8")
 
-                filename = os.path.join("data", str(label), str(distance) + ".jpg")
-                cv2.imwrite(filename, cv_image)        
-            #else:
-            #    cv_image = self.bridge.imgmsg_to_cv2(image, "bgr8")
-            #    filename = os.path.join("data", "4", str(distance) + ".jpg")
-            #    cv2.imwrite(filename, cv_image)   
+                    filename = os.path.join("data", str(label), str(distance) + ".jpg")
+                    cv2.imwrite(filename, cv_image)        
+                #else:
+                #    cv_image = self.bridge.imgmsg_to_cv2(image, "bgr8")
+                #    filename = os.path.join("data", "4", str(distance) + ".jpg")
+                #    cv2.imwrite(filename, cv_image)   
+        elif DO_DATA_COLLECTION_SITE:
+            cv_image = self.bridge.imgmsg_to_cv2(image, "bgr8")
+            filename = os.path.join("data", str(rospy.get_time()) + ".jpg")
+            cv2.imwrite(filename, cv_image)  
 
 if __name__ == '__main__':
     try:
