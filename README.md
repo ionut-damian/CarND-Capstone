@@ -17,7 +17,6 @@ The Project consists of the following ROS nodes:
 * DBW Node: converts target speed and angle to thorttle, steering and breaking commands
 * Traffic Light Detection: detects and classifies traffic lights from camera stream
     * Uses a DNN model based on Google's Inception V3.
-        * due to github's file size limit, the model has not been uploaded and needs to be created first. For this, simply run /ros/src/tl_detector/light_classification/tl_trainer.py
     * **IMPORTANT:** The strain of the image stream placed on the network might network lag which in turn can destabilize the entire system. Because of this, the system uses the ground truth traffic light information as default. This behavior can be overwritten using the "camera" button in the simulator.
 
 # Installation
@@ -68,14 +67,23 @@ git clone https://github.com/udacity/CarND-Capstone.git
 cd CarND-Capstone
 pip install -r requirements.txt
 ```
-3. Make and run styx
+
+3. Download the DNN models and place them in */ros/src/tl_detector/light_classification/*
+* for simulator: [link](https://www.dropbox.com/s/hl2o1r5jtksuj2o/model.h5?dl=1)
+* for site: [link](https://www.dropbox.com/s/bs2jipunexgzeis/model_site.h5?dl=1)
+* alternatively, you can train them yourself by running
+```bash
+ python /ros/src/tl_detector/light_classification/tl_trainer.py
+```
+
+4. Make and run styx
 ```bash
 cd ros
 catkin_make
 source devel/setup.sh
 roslaunch launch/styx.launch
 ```
-4. Run the simulator
+5. Run the simulator
 
 ### Real world testing
 1. Download [training bag](https://s3-us-west-1.amazonaws.com/udacity-selfdrivingcar/traffic_light_bag_file.zip) that was recorded on the Udacity self-driving car.
