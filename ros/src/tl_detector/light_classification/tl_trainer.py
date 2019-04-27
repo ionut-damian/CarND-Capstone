@@ -2,7 +2,7 @@ from __future__ import print_function
 import keras
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten, GlobalAveragePooling2D
-from keras.layers import Conv2D, MaxPooling2D
+from keras.layers import Conv2D, MaxPooling2D, Input
 from keras import backend as K
 from keras.layers import Lambda
 from keras.layers import Cropping2D
@@ -23,13 +23,17 @@ import os
 batch_size = 64
 epochs = 10
 
-PATH = "../data/"
+PATH = "../data_site/"
 NUM_CLASSES = 3
 
 INCEPTION = True
+SITE = True
 
 # input image dimensions
-input_shape = (300, 400, 3)
+if SITE:
+    input_shape = (240, 360, 3)
+else:    
+    input_shape = (299, 299, 3)
           
 def generator(samples, batch_size=32):
     n_samples = len(samples)
@@ -46,8 +50,14 @@ def generator(samples, batch_size=32):
                 # load image
                 image = cv2.imread(sample[1])
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                image = cv2.resize(image, (400,300), interpolation = cv2.INTER_CUBIC)                 
-                image = image[0:299, 0:299] #crop
+                
+                if SITE:           
+                    image = image[20:420, 100:700] #crop
+                    image = cv2.resize(image, (360,240), interpolation = cv2.INTER_CUBIC)  
+                else:
+                    image = cv2.resize(image, (400,300), interpolation = cv2.INTER_CUBIC)                 
+                    image = image[0:299, 0:299] #crop
+                    
                 images.append(image)
                 
                 #flip horizontally
@@ -93,8 +103,10 @@ def create_model():
     return model
 
 def create_inception():    
-    from keras.applications.inception_v3 import InceptionV3# create the base pre-trained model
-    base_model = InceptionV3(weights='imagenet', include_top=False)
+    from keras.applications.inception_v3 import InceptionV3
+    
+    input_tensor = Input(input_shape)
+    base_model = InceptionV3(weights='imagenet', include_top=False, input_tensor=input_tensor)
     x = base_model.output
     x = GlobalAveragePooling2D()(x)
     x = Dense(512, activation='relu')(x)
@@ -162,6 +174,13 @@ for i in range(3):
     for f in files:
         samples.append([label, f])
 
+#image = cv2.imread(samples[10][1])
+#image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+#image = image[20:420, 100:700] #crop
+#image = cv2.resize(image, (360,240), interpolation = cv2.INTER_CUBIC) 
+#cv2.imshow("img", image)
+#cv2.waitKey(2000)
+
 train_samples, validation_samples = train_test_split(samples, test_size=0.2)
 
 # create generators for data
@@ -179,7 +198,10 @@ else:
     model = create_model()
     train_model(model)   
 
-model.save('model.h5')
+if SITE:
+    model.save('model_site.h5')
+else:        
+    model.save('model.h5')
 
 
     
