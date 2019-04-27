@@ -19,7 +19,7 @@ STATE_COUNT_THRESHOLD = 3
 MIN_DIST_TO_LIGHT = 22
 MAX_DIST_TO_LIGHT = 100
 MAX_IMAGE_TIME_DIFF = 5
-MIN_IMAGE_TIME_DIFF = 0.5
+MIN_IMAGE_TIME_DIFF = 0.25
 MIN_SCORE_THRESHOLD = 0.6
 
 DO_DATA_COLLECTION_SIM = False
@@ -142,6 +142,7 @@ class TLDetector(object):
 
         if DO_DATA_COLLECTION_SIM or DO_DATA_COLLECTION_SITE:
             self.do_data_collection(msg)
+            return
 
         #process only every N-th image
         current_time = rospy.get_time()
@@ -158,6 +159,8 @@ class TLDetector(object):
 
         # get actual light state from camera
         light_state_predicted = self.get_light_state(light)
+        if light_state_predicted == TrafficLight.UNKNOWN:
+            return
 
         #if light.state != light_state_predicted:
         #    rospy.logwarn("traffic light prediction error (predicted = %d, ground truth = %d)", light_state_predicted, light.state)

@@ -63,7 +63,7 @@ class Controller(object):
         if throttle < 0.1 and target_linear_vel < current_vel:
             throttle = 0
             decel = max(target_linear_vel - current_vel, self.decel_limit * delta_time)
-            # rospy.logwarn("vel_t %.2f, vel_c %.2f, decel %.2f, decel_f %.2f", target_linear_vel, current_vel, target_linear_vel - current_vel, decel)
+            #rospy.logwarn("vel_t %.2f, vel_c %.2f, decel %.2f, decel_f %.2f", target_linear_vel, current_vel, target_linear_vel - current_vel, decel)
             break_force = abs(decel) * self.vehicle_mass * self.wheel_radius
 
         return throttle, break_force, steering_value

@@ -37,6 +37,7 @@ class TLClassifier(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = cv2.resize(image, (360,270), interpolation = cv2.INTER_CUBIC)
 
         with self.graph.as_default():
