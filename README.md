@@ -17,7 +17,7 @@ The Project consists of the following ROS nodes:
 * DBW Node: converts target speed and angle to thorttle, steering and breaking commands
 * Traffic Light Detection: detects and classifies traffic lights from camera stream
     * Uses a DNN model based on Google's Inception V3.
-    * **IMPORTANT:** The strain of the image stream placed on the network might network lag which in turn can destabilize the entire system. Because of this, the system uses the ground truth traffic light information as default. This behavior can be overwritten using the "camera" button in the simulator.
+    * **IMPORTANT:** The strain of the image stream placed on the network might create network lag which in turn can destabilize the entire system. Because of this, the system uses the ground truth traffic light information as default. This behavior can be overwritten using the "camera" button in the simulator.
 
 # Installation
 Please use **one** of the two installation options, either native **or** docker installation.
