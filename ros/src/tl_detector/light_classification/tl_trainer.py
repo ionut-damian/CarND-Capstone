@@ -23,17 +23,18 @@ import os
 batch_size = 64
 epochs = 10
 
-PATH = "../data_site/"
 NUM_CLASSES = 3
 
 INCEPTION = True
-SITE = True
+SITE = False
 
 # input image dimensions
 if SITE:
     input_shape = (240, 360, 3)
+    PATH = "../data_site/"
 else:    
-    input_shape = (299, 299, 3)
+    input_shape = (270, 360, 3)
+    PATH = "../data/"
           
 def generator(samples, batch_size=32):
     n_samples = len(samples)
@@ -55,8 +56,7 @@ def generator(samples, batch_size=32):
                     image = image[20:420, 100:700] #crop
                     image = cv2.resize(image, (360,240), interpolation = cv2.INTER_CUBIC)  
                 else:
-                    image = cv2.resize(image, (400,300), interpolation = cv2.INTER_CUBIC)                 
-                    image = image[0:299, 0:299] #crop
+                    image = cv2.resize(image, (360,270), interpolation = cv2.INTER_CUBIC)   
                     
                 images.append(image)
                 
@@ -174,12 +174,12 @@ for i in range(3):
     for f in files:
         samples.append([label, f])
 
-#image = cv2.imread(samples[10][1])
+image = cv2.imread(samples[10][1])
 #image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 #image = image[20:420, 100:700] #crop
-#image = cv2.resize(image, (360,240), interpolation = cv2.INTER_CUBIC) 
-#cv2.imshow("img", image)
-#cv2.waitKey(2000)
+image = cv2.resize(image, (360,270), interpolation = cv2.INTER_CUBIC) 
+cv2.imshow("img", image)
+cv2.waitKey(2000)
 
 train_samples, validation_samples = train_test_split(samples, test_size=0.2)
 
